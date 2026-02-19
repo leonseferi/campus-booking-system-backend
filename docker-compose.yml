@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16
+    container_name: cbs_db
+    environment:
+      POSTGRES_USER: cbs
+      POSTGRES_PASSWORD: cbs_password
+      POSTGRES_DB: cbs_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - cbs_pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: cbs_api
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    volumes:
+      - .:/code
+
+volumes:
+  cbs_pgdata:
