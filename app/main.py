@@ -1,3 +1,4 @@
+from app.db.session import engine
 from fastapi import FastAPI
 
 app = FastAPI(
