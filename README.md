@@ -1,138 +1,134 @@
-Campus Booking System – Backend API
+# Campus Booking System – Backend API
 
-A backend service for a multi-user campus room booking platform built using FastAPI, SQLAlchemy 2.0, Alembic, and JWT-based authentication.
+A backend service for a multi-user campus room booking platform, built with **FastAPI**, **SQLAlchemy 2.0**, **Alembic**, and **JWT-based authentication**.
 
 This project demonstrates structured backend architecture, stateless authentication, role-based access control (RBAC), and version-controlled database migrations.
 
-Overview
+---
 
-The system simulates a campus room booking backend supporting multiple user roles with secure authentication and clear domain modeling.
+## Overview
 
-Core capabilities include:
+The system simulates a campus room booking backend that supports multiple user roles, secure authentication, and clear domain modeling.
 
-JWT authentication (OAuth2 password flow)
+**Core capabilities:**
+- JWT authentication via OAuth2 password flow
+- Role-based access control (`STUDENT` / `STAFF` / `ADMIN`)
+- SQLAlchemy 2.0 ORM with Alembic migration management
+- Dependency-injected database sessions
+- Interactive Swagger documentation at `/docs`
+- Layered application architecture with clean separation of concerns
 
-Role-based access control (STUDENT / STAFF / ADMIN)
+---
 
-SQLAlchemy 2.0 ORM models
+## Architecture
 
-Alembic migration management
+The application follows a layered directory structure:
 
-Dependency-injected database sessions
-
-Interactive Swagger documentation
-
-Layered application architecture
-
-
-Architecture
-
-The application follows a layered structure:
-
+```
 app/
-├── api/ Route handlers
-├── core/ Configuration and security utilities
-├── db/ Database engine and session management
-├── models/ SQLAlchemy ORM models
-├── schemas/ Pydantic request and response models
+├── api/        # Route handlers
+├── core/       # Configuration and security utilities
+├── db/         # Database engine and session management
+├── models/     # SQLAlchemy ORM models
+└── schemas/    # Pydantic request and response models
+```
 
-Design Principles
+**Design principles:**
+- Explicit dependency injection throughout
+- Stateless JWT authentication — no server-side session state
+- Clean separation between the transport layer and domain logic
+- Version-controlled schema migrations via Alembic
+- Conventional commit structure for a clear Git history
 
-Explicit dependency injection
+---
 
-Stateless JWT authentication
+## Authentication & Authorization
 
-Clean separation between transport layer and domain logic
+Authentication uses the **OAuth2 password flow** with JWT bearer tokens.
 
-Version-controlled schema migrations
+**Flow:**
+1. Register via `POST /auth/register`
+2. Log in via `POST /auth/login` — receives an `access_token`
+3. Include the token in subsequent requests:
+   ```
+   Authorization: Bearer <access_token>
+   ```
+4. The token is validated and the user resolved via the `get_current_user` dependency
 
-Clear commit structure following conventional commits
+**Role-based authorization** is enforced at the route level using reusable dependency guards:
 
-Authentication & Authorization
-
-Authentication uses OAuth2 password flow with JWT bearer tokens.
-
-Flow:
-
-User registers via POST /auth/register
-
-User logs in via POST /auth/login
-
-The API returns an access_token
-
-The client includes the token in the request header:
-
-Authorization: Bearer <access_token>
-
-The token is validated and the user is loaded from the database using the get_current_user dependency.
-
-Role-based authorization is enforced using reusable dependency guards such as:
-
+```python
 require_roles("ADMIN")
+```
 
-Roles
+### Roles
 
-STUDENT – Create and view bookings
-STAFF – Manage rooms and approve bookings
-ADMIN – Full system control
+| Role | Permissions |
+|---|---|
+| `STUDENT` | Create and view bookings |
+| `STAFF` | Manage rooms and approve bookings |
+| `ADMIN` | Full system control |
 
-RBAC is enforced at the route level using dependency injection.
+---
 
-Database
+## Database
 
-SQLAlchemy 2.0 ORM
+The system uses **SQLAlchemy 2.0** ORM with **Alembic** for migration management. Development runs on **SQLite**, and the configuration is **PostgreSQL-ready** for production deployment.
 
-Alembic migrations
+Migrations keep the schema version-controlled and reproducible across environments.
 
-SQLite for development
+---
 
-PostgreSQL-ready configuration
+## Running Locally
 
-Migrations ensure the schema remains version-controlled and reproducible.
+```bash
+# 1. Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-Running Locally
+# 2. Install dependencies
+pip install -r requirements.txt
 
-Create a virtual environment
+# 3. Apply database migrations
+alembic upgrade head
 
-Activate it
+# 4. Start the development server
+uvicorn app.main:app --reload
+```
 
-Install dependencies from requirements.txt
+API documentation is available at: **http://127.0.0.1:8000/docs**
 
-Apply migrations using Alembic
+---
 
-Start the FastAPI server
+## Example Endpoints
 
-API documentation is available at:
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/auth/register` | Register a new user |
+| `POST` | `/auth/login` | Authenticate and receive a token |
+| `GET` | `/auth/me` | Get the current authenticated user |
 
-http://127.0.0.1:8000/docs
+---
 
-Example Endpoints
+## Tech Stack
 
-POST /auth/register
-POST /auth/login
-GET /auth/me
+| Tool | Purpose |
+|---|---|
+| FastAPI | Web framework and routing |
+| SQLAlchemy 2.0 | ORM and database abstraction |
+| Alembic | Schema migration management |
+| python-jose | JWT encoding and validation |
+| bcrypt | Password hashing |
+| Pydantic | Request/response validation |
+| SQLite | Development database |
 
-Roadmap
+---
 
-Transaction-safe booking overlap detection
+## Roadmap
 
-Booking approval workflow
-
-Administrative role management endpoints
-
-Automated testing with pytest
-
-Docker containerisation
-
-CI integration
-
-Tech Stack
-
-FastAPI
-SQLAlchemy 2.0
-Alembic
-python-jose (JWT)
-bcrypt
-Pydantic
-SQLite
-
+- [ ] Transaction-safe booking overlap detection
+- [ ] Booking approval workflow
+- [ ] Administrative role management endpoints
+- [ ] Automated testing with pytest
+- [ ] Docker containerisation
+- [ ] CI integration
