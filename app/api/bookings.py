@@ -61,17 +61,30 @@ def create_booking(
 
 @router.get("", response_model=list[BookingOut])
 def list_my_bookings(
+    status: BookingStatus | None = None,
+    room_id: int | None = None,
+    limit: int = 20,
+    offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    List bookings for the current user.
+    List bookings for the current user with filtering + pagination.
     """
-    rows = db.scalars(
-        select(Booking)
-        .where(Booking.user_id == current_user.id)
-        .order_by(Booking.created_at.desc())
-    ).all()
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+
+    query = select(Booking).where(Booking.user_id == current_user.id)
+
+    if status:
+        query = query.where(Booking.status == status.value)
+
+    if room_id:
+        query = query.where(Booking.room_id == room_id)
+
+    query = query.order_by(Booking.created_at.desc()).limit(limit).offset(offset)
+
+    rows = db.scalars(query).all()
     return list(rows)
 
 

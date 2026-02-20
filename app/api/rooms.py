@@ -50,12 +50,26 @@ def create_room(
 
 
 @router.get("", response_model=list[RoomOut])
-def list_rooms(db: Session = Depends(get_db)):
+def list_rooms(
+    limit: int = 20,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
     """
-    List all rooms.
-    Public by default (common pattern for browsing availability).
+    List rooms with pagination.
+
+    Default: limit=20, offset=0
     """
-    rooms = db.scalars(select(Room).order_by(Room.code)).all()
+    if limit < 1 or limit > 100:
+        raise HTTPException(status_code=400, detail="limit must be between 1 and 100")
+
+    rooms = db.scalars(
+        select(Room)
+        .order_by(Room.code)
+        .limit(limit)
+        .offset(offset)
+    ).all()
+
     return list(rooms)
 
 
