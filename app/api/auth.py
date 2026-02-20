@@ -36,18 +36,11 @@ def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):
-    """
-    OAuth2 password flow login.
-    Swagger's Authorize button sends form-urlencoded fields: username + password.
-    """
     user = db.scalar(select(User).where(User.email == form_data.username))
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
-        )
+        raise HTTPException(status_code=401, detail="Invalid credentials")
 
-    access_token = create_access_token(subject=str(user.id))
+    access_token = create_access_token(str(user.id))
     return {"access_token": access_token, "token_type": "bearer"}
 
 

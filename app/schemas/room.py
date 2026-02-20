@@ -6,6 +6,8 @@ Separates external API contracts from internal ORM models.
 
 from pydantic import BaseModel, Field
 
+from datetime import date, datetime
+from typing import List
 
 class RoomCreate(BaseModel):
     code: str = Field(min_length=1, max_length=50, examples=["A101"])
@@ -23,3 +25,16 @@ class RoomOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+
+
+class TimeSlot(BaseModel):
+    start_time: datetime
+    end_time: datetime
+
+
+class RoomAvailability(BaseModel):
+    room_id: int
+    date: date
+    booked_slots: List[TimeSlot]
