@@ -10,7 +10,7 @@ Keeping this logic out of the router makes it easier to test and maintain.
 """
 
 from datetime import datetime
-from sqlalchemy import and_, or_, select, text
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.enums import BookingStatus
@@ -19,7 +19,7 @@ from app.models.room import Room
 
 
 class BookingConflictError(Exception):
-    """Raised when a booking overlaps with an existing approved booking."""
+    """Raised when a booking overlaps with an existing booking."""
     pass
 
 
@@ -34,11 +34,6 @@ def _validate_time_range(start_time: datetime, end_time: datetime) -> None:
         raise InvalidBookingTimeError("start_time must be before end_time")
 
 
-def _overlaps(a_start: datetime, a_end: datetime, b_start: datetime, b_end: datetime) -> bool:
-    # Overlap exists if ranges intersect: a_start < b_end AND a_end > b_start
-    return a_start < b_end and a_end > b_start
-
-
 def assert_no_approved_overlap(
     db: Session,
     room_id: int,
@@ -49,24 +44,52 @@ def assert_no_approved_overlap(
     """
     Enforce: No overlaps against APPROVED bookings.
 
-    We allow multiple PENDING requests for the same room/time (queue/approval model),
-    but approval must be blocked if it would conflict with an already APPROVED booking.
+    Approval must be blocked if it would conflict with an already APPROVED booking.
     """
     _validate_time_range(start_time, end_time)
 
     q = select(Booking).where(
         Booking.room_id == room_id,
         Booking.status == BookingStatus.APPROVED.value,
-        # overlap condition:
         Booking.start_time < end_time,
         Booking.end_time > start_time,
     )
+
     if exclude_booking_id is not None:
         q = q.where(Booking.id != exclude_booking_id)
 
     conflict = db.scalar(q)
     if conflict:
         raise BookingConflictError("Booking conflicts with an existing approved booking")
+
+
+def assert_no_active_overlap(
+    db: Session,
+    room_id: int,
+    start_time: datetime,
+    end_time: datetime,
+    exclude_booking_id: int | None = None,
+) -> None:
+    """
+    Enforce: No overlaps against ACTIVE bookings (PENDING or APPROVED).
+
+    This prevents duplicate/competing requests for the same room/time window.
+    """
+    _validate_time_range(start_time, end_time)
+
+    q = select(Booking).where(
+        Booking.room_id == room_id,
+        Booking.status.in_([BookingStatus.PENDING.value, BookingStatus.APPROVED.value]),
+        Booking.start_time < end_time,
+        Booking.end_time > start_time,
+    )
+
+    if exclude_booking_id is not None:
+        q = q.where(Booking.id != exclude_booking_id)
+
+    conflict = db.scalar(q)
+    if conflict:
+        raise BookingConflictError("Room already booked for this time range")
 
 
 def create_pending_booking(
@@ -83,11 +106,10 @@ def create_pending_booking(
     We validate:
     - room exists
     - time range is valid
-    - (optional strictness) no overlap vs APPROVED bookings
+    - no overlap vs ACTIVE bookings (PENDING or APPROVED)
 
     Note: For concurrency safety in SQLite, we acquire an IMMEDIATE transaction lock
-    during conflict check + insert. In PostgreSQL, you'd typically use SELECT ... FOR UPDATE
-    or SERIALIZABLE isolation for stronger guarantees.
+    during conflict check + insert.
     """
     _validate_time_range(start_time, end_time)
 
@@ -98,8 +120,8 @@ def create_pending_booking(
     # Lock DB for the shortest time possible (SQLite-friendly)
     db.execute(text("BEGIN IMMEDIATE"))
 
-    # Prevent "requesting a slot that is already approved"
-    assert_no_approved_overlap(db, room_id, start_time, end_time)
+    # Prevent requesting overlapping slots (PENDING or APPROVED)
+    assert_no_active_overlap(db, room_id, start_time, end_time)
 
     booking = Booking(
         room_id=room_id,
@@ -152,6 +174,22 @@ def reject_booking(db: Session, *, booking_id: int) -> Booking:
         raise ValueError("Only PENDING bookings can be rejected")
 
     booking.status = BookingStatus.REJECTED.value
+    db.commit()
+    db.refresh(booking)
+    return booking
+
+def cancel_booking(db: Session, *, booking_id: int) -> Booking:
+    booking = db.scalar(select(Booking).where(Booking.id == booking_id))
+    if not booking:
+        raise ValueError("Booking not found")
+
+    if booking.status == BookingStatus.CANCELLED.value:
+        raise ValueError("Booking already cancelled")
+
+    if booking.status == BookingStatus.REJECTED.value:
+        raise ValueError("Rejected bookings cannot be cancelled")
+
+    booking.status = BookingStatus.CANCELLED.value
     db.commit()
     db.refresh(booking)
     return booking

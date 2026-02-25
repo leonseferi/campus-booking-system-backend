@@ -22,6 +22,7 @@ from app.services.booking_service import (
     create_pending_booking,
     reject_booking,
 )
+from app.services.booking_service import cancel_booking
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -123,3 +124,32 @@ def reject(
     except ValueError as e:
         msg = str(e)
         raise HTTPException(status_code=404 if "not found" in msg.lower() else 400, detail=msg)
+    
+@router.post("/{booking_id}/cancel", response_model=BookingOut)
+def cancel(
+    booking_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Cancel a booking.
+
+    - Users can cancel their own bookings
+    - STAFF/ADMIN can cancel any booking
+    """
+    booking = db.scalar(select(Booking).where(Booking.id == booking_id))
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+
+    is_admin_or_staff = current_user.role in ["ADMIN", "STAFF"]
+    if booking.user_id != current_user.id and not is_admin_or_staff:
+        raise HTTPException(status_code=403, detail="Not allowed to cancel this booking")
+
+    try:
+        return cancel_booking(db, booking_id=booking_id)
+    except ValueError as e:
+        msg = str(e)
+        raise HTTPException(
+            status_code=400 if ("already" in msg.lower() or "cannot" in msg.lower()) else 404,
+            detail=msg,
+        )
