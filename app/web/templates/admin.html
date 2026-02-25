@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="hero">
+  <h1>Admin</h1>
+  <p>Manage bookings and view operational tools. Keep it clean and product-like.</p>
+</div>
+
+<div class="grid cols-2">
+  <div class="card">
+    <h3>Booking approvals</h3>
+    <p style="margin-bottom:12px;">Use your API endpoints behind the scenes. This page can call them next.</p>
+
+    <div class="notice">
+      <strong>Next UI upgrade:</strong> show a pending bookings table here with Approve/Reject buttons.
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Metrics</h3>
+    <p style="margin-bottom:12px;">Expose basic counters here (total users, bookings per day, etc.).</p>
+    <div class="notice">
+      <strong>Tip:</strong> keep metrics read-only for safety.
+    </div>
+  </div>
+</div>
+
+{% endblock %}

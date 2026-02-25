@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>{% block title %}Campus Booking Portal{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/app.js"></script>
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">CBS</div>
+      <div class="brand-text">
+        <div class="brand-title">Campus Booking System</div>
+        <div class="brand-subtitle">Student & Staff Portal</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <a href="/portal" class="nav-link">Dashboard</a>
+      <a href="/portal/rooms" class="nav-link">Rooms</a>
+      <a href="/portal/bookings" class="nav-link">Bookings</a>
+      <a href="/portal/admin" class="nav-link" id="nav-admin" style="display:none;">Admin</a>
+    </nav>
+
+    <div class="auth">
+      <span class="pill" id="whoami">Not signed in</span>
+      <a class="btn btn-ghost" href="/portal/login" id="btn-login">Login</a>
+      <button class="btn btn-danger" id="btn-logout" style="display:none;">Logout</button>
+    </div>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <span>Campus Booking System • FastAPI • SQLAlchemy • Alembic • JWT</span>
+  </footer>
+</body>
+</html>

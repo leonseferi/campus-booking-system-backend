@@ -9,7 +9,10 @@ Contains the core business logic:
 Keeping this logic out of the router makes it easier to test and maintain.
 """
 
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -20,18 +23,38 @@ from app.models.room import Room
 
 class BookingConflictError(Exception):
     """Raised when a booking overlaps with an existing booking."""
-    pass
 
 
 class InvalidBookingTimeError(Exception):
     """Raised when start/end times are invalid."""
-    pass
 
 
 def _validate_time_range(start_time: datetime, end_time: datetime) -> None:
     # Strict validation: must be increasing and non-zero duration
     if start_time >= end_time:
         raise InvalidBookingTimeError("start_time must be before end_time")
+
+
+def _validate_booking_window(start_time: datetime, end_time: datetime) -> None:
+    """
+    Extra business rules:
+    - booking must be in the future
+    - minimum duration (15 minutes)
+    - maximum duration (4 hours)
+    """
+    _validate_time_range(start_time, end_time)
+
+    duration = end_time - start_time
+    if duration < timedelta(minutes=15):
+        raise InvalidBookingTimeError("Booking duration must be at least 15 minutes")
+
+    if duration > timedelta(hours=4):
+        raise InvalidBookingTimeError("Booking duration cannot exceed 4 hours")
+
+    # Compare using UTC if datetime is timezone-aware
+    now = datetime.now(timezone.utc) if start_time.tzinfo else datetime.now()
+    if start_time < now:
+        raise InvalidBookingTimeError("Bookings must start in the future")
 
 
 def assert_no_approved_overlap(
@@ -46,7 +69,7 @@ def assert_no_approved_overlap(
 
     Approval must be blocked if it would conflict with an already APPROVED booking.
     """
-    _validate_time_range(start_time, end_time)
+    _validate_booking_window(start_time, end_time)
 
     q = select(Booking).where(
         Booking.room_id == room_id,
@@ -75,7 +98,7 @@ def assert_no_active_overlap(
 
     This prevents duplicate/competing requests for the same room/time window.
     """
-    _validate_time_range(start_time, end_time)
+    _validate_booking_window(start_time, end_time)
 
     q = select(Booking).where(
         Booking.room_id == room_id,
@@ -105,22 +128,19 @@ def create_pending_booking(
 
     We validate:
     - room exists
-    - time range is valid
+    - booking window is valid
     - no overlap vs ACTIVE bookings (PENDING or APPROVED)
 
-    Note: For concurrency safety in SQLite, we acquire an IMMEDIATE transaction lock
-    during conflict check + insert.
+    SQLite note: BEGIN IMMEDIATE is used to reduce race conditions during
+    conflict check + insert.
     """
-    _validate_time_range(start_time, end_time)
+    _validate_booking_window(start_time, end_time)
 
     room = db.scalar(select(Room).where(Room.id == room_id))
     if not room:
         raise ValueError("Room not found")
 
-    # Lock DB for the shortest time possible (SQLite-friendly)
     db.execute(text("BEGIN IMMEDIATE"))
-
-    # Prevent requesting overlapping slots (PENDING or APPROVED)
     assert_no_active_overlap(db, room_id, start_time, end_time)
 
     booking = Booking(
@@ -149,7 +169,6 @@ def approve_booking(db: Session, *, booking_id: int) -> Booking:
     if booking.status != BookingStatus.PENDING.value:
         raise ValueError("Only PENDING bookings can be approved")
 
-    # Lock + re-check conflicts at approval time (prevents race conditions)
     db.execute(text("BEGIN IMMEDIATE"))
     assert_no_approved_overlap(
         db,
@@ -177,6 +196,7 @@ def reject_booking(db: Session, *, booking_id: int) -> Booking:
     db.commit()
     db.refresh(booking)
     return booking
+
 
 def cancel_booking(db: Session, *, booking_id: int) -> Booking:
     booking = db.scalar(select(Booking).where(Booking.id == booking_id))

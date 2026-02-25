@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Login • Campus Booking{% endblock %}
+
+{% block content %}
+<div class="grid">
+  <div class="card">
+    <h1>Sign in</h1>
+    <p class="muted">Use your account to access bookings and staff/admin actions.</p>
+
+    <form id="login-form" class="form">
+      <label>
+        Email
+        <input id="email" type="email" placeholder="you@university.ac.uk" required />
+      </label>
+
+      <label>
+        Password
+        <input id="password" type="password" placeholder="••••••••" required />
+      </label>
+
+      <button class="btn btn-primary" type="submit">Login</button>
+      <p class="error" id="login-error" style="display:none;"></p>
+      <p class="ok" id="login-ok" style="display:none;"></p>
+    </form>
+
+    <div class="hr"></div>
+    <p class="muted small">
+      If you don’t have an account yet, register via Swagger for now (or add a portal register page later).
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>What happens on login?</h2>
+    <ul class="list">
+      <li>Portal calls <code>/auth/login</code> (OAuth2 password flow)</li>
+      <li>Stores JWT in <code>localStorage</code></li>
+      <li>All future requests attach <code>Authorization: Bearer &lt;token&gt;</code></li>
+    </ul>
+  </div>
+</div>
+
+<script>
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value;
+
+  const err = document.getElementById("login-error");
+  const ok = document.getElementById("login-ok");
+  err.style.display = "none";
+  ok.style.display = "none";
+
+  try {
+    await CBS.login(email, password);
+    ok.textContent = "Logged in. Redirecting…";
+    ok.style.display = "block";
+    setTimeout(() => window.location.href = "/portal", 600);
+  } catch (ex) {
+    err.textContent = ex?.message || "Login failed";
+    err.style.display = "block";
+  }
+});
+</script>
+{% endblock %}

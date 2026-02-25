@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block title %}Rooms • Campus Booking{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-head">
+    <div>
+      <h1>Rooms</h1>
+      <p class="muted">Browse available rooms. Staff/Admin can create new rooms.</p>
+    </div>
+    <button class="btn btn-secondary" id="btn-refresh">Refresh</button>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card inner">
+      <h2>Create room</h2>
+      <p class="muted small">Only STAFF/ADMIN should use this.</p>
+
+      <form id="room-form" class="form">
+        <label>Room name <input id="r-name" required placeholder="Lab A" /></label>
+        <label>Capacity <input id="r-cap" type="number" min="1" required value="20" /></label>
+        <label>Code <input id="r-code" required placeholder="CS-LAB-01" /></label>
+        <label>Location <input id="r-loc" required placeholder="Main Building • Floor 2" /></label>
+        <button class="btn btn-primary" type="submit">Create</button>
+        <p class="error" id="room-error" style="display:none;"></p>
+        <p class="ok" id="room-ok" style="display:none;"></p>
+      </form>
+    </div>
+
+    <div class="card inner">
+      <h2>Room list</h2>
+      <div class="table-wrap">
+        <table class="table" id="rooms-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Name</th><th>Code</th><th>Capacity</th><th>Location</th>
+            </tr>
+          </thead>
+          <tbody id="rooms-body">
+            <tr><td colspan="5" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+async function loadRooms() {
+  const body = document.getElementById("rooms-body");
+  body.innerHTML = `<tr><td colspan="5" class="muted">Loading…</td></tr>`;
+  try {
+    // adjust this path if your API uses /rooms/ list vs /rooms
+    const rooms = await CBS.get("/rooms", { auth: false });
+    if (!rooms || rooms.length === 0) {
+      body.innerHTML = `<tr><td colspan="5" class="muted">No rooms yet.</td></tr>`;
+      return;
+    }
+    body.innerHTML = rooms.map(r => `
+      <tr>
+        <td>${r.id}</td>
+        <td>${CBS.esc(r.name)}</td>
+        <td>${CBS.esc(r.code ?? "")}</td>
+        <td>${r.capacity}</td>
+        <td>${CBS.esc(r.location ?? "")}</td>
+      </tr>
+    `).join("");
+  } catch (e) {
+    body.innerHTML = `<tr><td colspan="5" class="error">Failed to load rooms: ${CBS.esc(e.message)}</td></tr>`;
+  }
+}
+
+document.getElementById("btn-refresh").addEventListener("click", loadRooms);
+
+document.getElementById("room-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("room-error");
+  const ok = document.getElementById("room-ok");
+  err.style.display = "none";
+  ok.style.display = "none";
+
+  try {
+    const payload = {
+      name: document.getElementById("r-name").value.trim(),
+      capacity: Number(document.getElementById("r-cap").value),
+      code: document.getElementById("r-code").value.trim(),
+      location: document.getElementById("r-loc").value.trim(),
+    };
+
+    // If your create endpoint is /rooms (POST) and protected, auth must be true
+    await CBS.post("/rooms", payload, { auth: true });
+
+    ok.textContent = "Room created.";
+    ok.style.display = "block";
+    await loadRooms();
+  } catch (ex) {
+    err.textContent = ex?.message || "Create room failed";
+    err.style.display = "block";
+  }
+});
+
+loadRooms();
+</script>
+{% endblock %}

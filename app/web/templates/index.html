@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Dashboard • Campus Booking{% endblock %}
+
+{% block content %}
+<div class="grid">
+  <div class="card">
+    <h1>Dashboard</h1>
+    <p class="muted">Quick overview and shortcuts.</p>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Signed in as</div>
+        <div class="kpi-value" id="dash-user">—</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Role</div>
+        <div class="kpi-value" id="dash-role">—</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <a class="btn btn-primary" href="/portal/rooms">Browse rooms</a>
+      <a class="btn btn-secondary" href="/portal/bookings">My bookings</a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Status</h2>
+    <div class="mono" id="health-box">Loading…</div>
+  </div>
+</div>
+
+<script>
+(async () => {
+  const h = await CBS.get("/health", { auth: false });
+  document.getElementById("health-box").textContent = JSON.stringify(h, null, 2);
+
+  const me = await CBS.safeMe();
+  document.getElementById("dash-user").textContent = me ? me.email : "Not signed in";
+  document.getElementById("dash-role").textContent = me ? me.role : "—";
+})();
+</script>
+{% endblock %}

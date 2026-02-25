@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+{% block title %}Bookings • Campus Booking{% endblock %}
+
+{% block content %}
+<div class="card">
+  <div class="card-head">
+    <div>
+      <h1>Bookings</h1>
+      <p class="muted">Create a booking request, view your bookings, and manage approvals (staff/admin).</p>
+    </div>
+    <button class="btn btn-secondary" id="btn-refresh">Refresh</button>
+  </div>
+
+  <div class="grid cols-2">
+    <div class="card inner">
+      <h2>Create booking</h2>
+      <p class="muted small">You must be logged in.</p>
+
+      <form id="booking-form" class="form">
+        <label>Room ID <input id="b-room" type="number" min="1" required /></label>
+        <label>Start (ISO) <input id="b-start" required placeholder="2026-02-21T10:00:00" /></label>
+        <label>End (ISO) <input id="b-end" required placeholder="2026-02-21T11:00:00" /></label>
+        <button class="btn btn-primary" type="submit">Request booking</button>
+        <p class="error" id="booking-error" style="display:none;"></p>
+        <p class="ok" id="booking-ok" style="display:none;"></p>
+      </form>
+    </div>
+
+    <div class="card inner">
+      <h2>My bookings</h2>
+      <div class="table-wrap">
+        <table class="table" id="bookings-table">
+          <thead>
+            <tr>
+              <th>ID</th><th>Room</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="bookings-body">
+            <tr><td colspan="6" class="muted">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <div class="card inner" id="staff-panel" style="display:none;">
+    <div class="card-head">
+      <div>
+        <h2>Staff/Admin: Pending queue</h2>
+        <p class="muted small">Approve/reject pending bookings.</p>
+      </div>
+      <button class="btn btn-secondary" id="btn-refresh-pending">Refresh</button>
+    </div>
+
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th><th>User</th><th>Room</th><th>Start</th><th>End</th><th>Status</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pending-body">
+          <tr><td colspan="7" class="muted">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function actionButtons(booking, me) {
+  const isAdminOrStaff = me && (me.role === "ADMIN" || me.role === "STAFF");
+  const canCancel = (me && (booking.user_id === me.id || isAdminOrStaff)) && booking.status !== "CANCELLED" && booking.status !== "REJECTED";
+  return `
+    <div class="btn-row">
+      ${canCancel ? `<button class="btn btn-small btn-danger" data-action="cancel" data-id="${booking.id}">Cancel</button>` : ``}
+    </div>
+  `;
+}
+
+async function loadMyBookings() {
+  const body = document.getElementById("bookings-body");
+  body.innerHTML = `<tr><td colspan="6" class="muted">Loading…</td></tr>`;
+
+  const me = await CBS.safeMe();
+
+  if (!me) {
+    body.innerHTML = `<tr><td colspan="6" class="muted">Login to view bookings.</td></tr>`;
+    return;
+  }
+
+  // Adjust endpoint if yours differs (looks like GET /bookings exists and is protected)
+  const bookings = await CBS.get("/bookings", { auth: true });
+
+  if (!bookings || bookings.length === 0) {
+    body.innerHTML = `<tr><td colspan="6" class="muted">No bookings yet.</td></tr>`;
+    return;
+  }
+
+  body.innerHTML = bookings.map(b => `
+    <tr>
+      <td>${b.id}</td>
+      <td>${b.room_id}</td>
+      <td>${CBS.esc(b.start_time)}</td>
+      <td>${CBS.esc(b.end_time)}</td>
+      <td><span class="status status-${(b.status||"").toLowerCase()}">${CBS.esc(b.status)}</span></td>
+      <td>${actionButtons(b, me)}</td>
+    </tr>
+  `).join("");
+
+  // hook button clicks
+  body.querySelectorAll("button[data-action]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+
+      try {
+        if (action === "cancel") {
+          await CBS.post(`/bookings/${id}/cancel`, {}, { auth: true });
+        }
+        await loadMyBookings();
+        await loadPending(); // keep in sync if staff
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
+}
+
+async function loadPending() {
+  const pendingBody = document.getElementById("pending-body");
+  const me = await CBS.safeMe();
+  const staffPanel = document.getElementById("staff-panel");
+
+  const isAdminOrStaff = me && (me.role === "ADMIN" || me.role === "STAFF");
+  staffPanel.style.display = isAdminOrStaff ? "block" : "none";
+  if (!isAdminOrStaff) return;
+
+  pendingBody.innerHTML = `<tr><td colspan="7" class="muted">Loading…</td></tr>`;
+
+  // If you DON’T have this endpoint yet, either:
+  // - add it, or
+  // - temporarily filter by status using /bookings?status=PENDING if your API supports it
+  let pending = [];
+  try {
+    pending = await CBS.get("/bookings?status=PENDING", { auth: true });
+  } catch {
+    // fallback: load all and filter client-side
+    const all = await CBS.get("/bookings", { auth: true });
+    pending = (all || []).filter(b => b.status === "PENDING");
+  }
+
+  if (!pending || pending.length === 0) {
+    pendingBody.innerHTML = `<tr><td colspan="7" class="muted">No pending requests.</td></tr>`;
+    return;
+  }
+
+  pendingBody.innerHTML = pending.map(b => `
+    <tr>
+      <td>${b.id}</td>
+      <td>${b.user_id}</td>
+      <td>${b.room_id}</td>
+      <td>${CBS.esc(b.start_time)}</td>
+      <td>${CBS.esc(b.end_time)}</td>
+      <td><span class="status status-${(b.status||"").toLowerCase()}">${CBS.esc(b.status)}</span></td>
+      <td>
+        <div class="btn-row">
+          <button class="btn btn-small btn-primary" data-action="approve" data-id="${b.id}">Approve</button>
+          <button class="btn btn-small btn-ghost" data-action="reject" data-id="${b.id}">Reject</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+
+  pendingBody.querySelectorAll("button[data-action]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = Number(btn.dataset.id);
+      const action = btn.dataset.action;
+      try {
+        if (action === "approve") await CBS.post(`/bookings/${id}/approve`, {}, { auth: true });
+        if (action === "reject") await CBS.post(`/bookings/${id}/reject`, {}, { auth: true });
+        await loadPending();
+        await loadMyBookings();
+      } catch (e) {
+        alert(e.message);
+      }
+    });
+  });
+}
+
+document.getElementById("btn-refresh").addEventListener("click", loadMyBookings);
+document.getElementById("btn-refresh-pending").addEventListener("click", loadPending);
+
+document.getElementById("booking-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const err = document.getElementById("booking-error");
+  const ok = document.getElementById("booking-ok");
+  err.style.display = "none";
+  ok.style.display = "none";
+
+  try {
+    const payload = {
+      room_id: Number(document.getElementById("b-room").value),
+      start_time: document.getElementById("b-start").value.trim(),
+      end_time: document.getElementById("b-end").value.trim(),
+    };
+
+    await CBS.post("/bookings", payload, { auth: true });
+
+    ok.textContent = "Booking requested.";
+    ok.style.display = "block";
+    await loadMyBookings();
+    await loadPending();
+  } catch (ex) {
+    err.textContent = ex?.message || "Booking request failed";
+    err.style.display = "block";
+  }
+});
+
+(async () => {
+  await CBS.refreshHeader();
+  await loadMyBookings();
+  await loadPending();
+})();
+</script>
+{% endblock %}
